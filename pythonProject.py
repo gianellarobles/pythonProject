@@ -9,6 +9,8 @@ Created on Wed Dec 10 19:38:44 2025
 import pandas as pd
 import numpy as np
 import re
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 f = pd.read_csv("/Users/gianellarobles/Downloads/movies.csv")
 
@@ -180,8 +182,10 @@ f['ROI_pct'] = f['ROI'] * 100
 
 #getting ready to merge
 f['title_id'] = f['Title'].astype(str).str.strip().str.lower()
-rt['id'] = rt['movie_title'].astype(str).str.strip().str.lower()
+rt['title_id'] = rt['movie_title'].astype(str).str.strip().str.lower()
 
+rt["year"] = rt["year"].dt.year
+f["year"] = f["year"].astype(int)
 
 #take away duplicates
 rt_sorted = rt.sort_values('year')
@@ -196,18 +200,40 @@ rt_filtered = rt_unique[
     [ 'movie_title','year', 'tomatometer_status', 'tomatometer_rating']
 ]
 
+f = f.drop_duplicates(
+    subset=["title_id","year"],
+    keep="first"
+)
+
+#Offical meerge using Rotten Tomato as the base and adding movies
+
+
+mergedFinal = rt.merge(
+    f,
+    how="left",
+    on=["title_id", "year"]
+)
+
+print(len(rt), len(mergedFinal))
+
+#8966 rows for both
 
 #mergeing using left (movies.csv) and keys ('Title' and 'Year')
 f['year'] = f['Year']          
 rt['year'] = pd.to_datetime(rt['year'])
 
 #merged - new dataset combining both csv files
-merged = f.merge(
+#not needed anymore
+merged = rt.merge(
     rt_filtered,
     how='left',
-    left_on=['Title', 'year'],
-    right_on=['movie_title', 'year']
+    left_on=['movie_title', 'year'],
+    right_on=['Title', 'year'],
+   
 )
+
+
+
 
 #1646 rows
 print(len(f), len(merged))
@@ -219,13 +245,113 @@ print(rating_not_missing)
 #483
 
 
-#creating a list within the column 'Genre'
-f['Genre_list'] = f['Genre'].str.split(',').apply(lambda x: [g.strip() for g in x])
+#creating a list within the column 'Genre' in rt
+rt['Genre_list'] = rt['genre'].str.split(',').apply(lambda x: [g.strip() for g in x])
 
-f_exploded = f.explode('Genre_list')
+rt_exploded = rt.explode('Genre_list')
+
+#rename genre_list since the other merge was not included and had to reupdated
+
+mergedFinal = mergedFinal.drop(columns=["Genre_list_y"])
+
+mergedFinal = mergedFinal.rename(columns={"Genre_list_x":"Genre_list"})
+
+
+#going back to original merged since there was issues witht mergeFinal
+#Genre ranking
+merged['Genre_list'] = merged['Genre'].str.split(', ')
+genre_df = merged.explode('Genre_list')
+genre_counts = genre_df['Genre_list'].value_counts()
+print(genre_counts)
+
+#separates into genres and how may are there
+plt.figure(figsize=(10, 6))
+genre_counts.plot(kind='bar')
+plt.title('Genre Ranking')
+plt.xlabel('Genre')
+plt.ylabel('Count')
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+
+#Movie certificate ranking
+merged['Certificate'].value_counts().plot(kind='bar')
+plt.title('Certificate')
+plt.xticks(rotation=45)
+plt.show()
+
+#Number of Movies by Year
+#change year to int and not to display in float
+year_counts = merged["Year"].value_counts().sort_index()
+plt.plot(year_counts.index,year_counts.values)
+plt.xlabel("Year")
+plt.ylabel("Number of Movies")
+plt.xticks(year_counts.index,rotation=45) #gets integer
+plt.tight_layout()
+plt.show()
+
+#Number of Movies by Month
+#Only 482 rows
+
+#make sure there are valid months
+valid_months = [
+    "January", "February", "March", "April", "May", "June",
+    "July","August","September","October","November", "December"
+    ]
+
+merged_clean = merged[merged["Month"].isin(valid_months)].copy()
+merged_clean["Month"] = pd.Categorical(
+    merged_clean["Month"],
+    categories = valid_months,
+    ordered = True
+)
+
+merged_clean['Month'].value_counts().sort_index().plot(kind='bar')
+plt.title('Number of Movies by Month')
+plt.xticks(rotation=45)
+plt.xlabel('Month')
+plt.ylabel('Count')
+plt.show()
+
+
+#more graphs to add
+
+
+# come back here
+
+#correlation graph starting
+#needs to use tomatometer_status and tomatometer_rating 
+#create new rotten tomato variable so the original one doesn't get messed up
+
+rt_copy = rt.copy()
+
+rt_copy[["tomatometer_status","tomatometer_rating"]]
+
+cert_corr = (
+    rt_copy.groupby("tomatometer_status")["tomatometer_rating"]
+        .mean()
+        .sort_values(ascending=False)
+    )
+
+#now graph this correlation
+cert_corr_column = cert_corr.to_frame(name="Avg_RT_Rating")
+plt.figure(figsize=(4,3))
+sns.heatmap(
+    cert_corr_column,
+    annot=True,
+    cmap="RdYGn",
+    fmt=".1f",
+    cbar=True
+)
 
 
 
+cert_corr.plot(kind="bar")
+plt.title("Average Rotten Tomatoes Rating")
+plt.xlabel("Tomatometer Certification")
+plt.ylabel("Average Crtic Rating")
+plt.xticks(rotation=0)
+plt.show()
 #rename columns
 rt = rt.rename(columns={
     "movie_title": "Title",
