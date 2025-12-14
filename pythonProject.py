@@ -10,7 +10,6 @@ import pandas as pd
 import numpy as np
 import re
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 f = pd.read_csv("/Users/gianellarobles/Downloads/movies.csv")
 
@@ -62,7 +61,7 @@ rt = rt.drop(columns=["in_theaters_date"])
 
 #drop years < 2003
 
-rt = rt[rt["year"]>=2003]
+#rt = rt[rt["year"]>=2003]
 
 #reset index, no missing numbers
 rt = rt.reset_index(drop=True)
@@ -85,9 +84,312 @@ rt.isnull().sum()
 #drop null values less than 5%
 rt = rt.dropna()
 
-#Movies csv
-f.isnull().sum()
 
+#reset index
+rt = rt.reset_index(drop=True)
+
+#15399
+
+
+
+#check for any unknown values
+(rt == "Unknown").sum()
+
+#check the row 
+rt[rt.eq("Unknown").any(axis=1)]
+
+#drop the unknown
+rt = rt[rt["movie_title"] != "Unknown"]
+
+#8966 row 
+
+#getting ready to merge
+f['title_id'] = f['Title'].astype(str).str.strip().str.lower()
+rt['title_id'] = rt['movie_title'].astype(str).str.strip().str.lower()
+
+rt["year"] = rt["year"].dtype
+f["year"] = f["Year"].astype(int)
+
+#take away duplicates
+rt_sorted = rt.sort_values('year')
+
+rt = rt_sorted.drop_duplicates(
+
+    subset=['movie_title', 'year'],
+    keep='first'
+)
+
+rt_filtered = rt[
+    [ 'movie_title','year', 'tomatometer_status', 'tomatometer_rating']
+]
+
+
+#creating a list within the column 'Genre' in rt
+rt['Genre_list'] = rt['genre'].str.split(',').apply(lambda x: [g.strip() for g in x])
+
+rt_exploded = rt.explode('Genre_list')
+
+
+#going back to original merged since there was issues witht mergeFinal
+#Genre rankinr
+rt['Genre_list'] = rt['genre'].str.split(', ')
+genre_df = rt.explode('Genre_list')
+genre_counts = genre_df['Genre_list'].value_counts()
+print(genre_counts)
+
+
+
+#separates into genres and how may are there
+plt.figure(figsize=(10, 6))
+genre_counts.plot(kind='bar', color="red")
+plt.title('Genre Ranking')
+plt.xlabel('Genre')
+plt.ylabel('Count')
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+
+#Movie certificate ranking
+rt['tomatometer_status'].value_counts().plot(kind='bar', color="red")
+plt.title('Tomato Meter Status')
+plt.xticks(rotation=45)
+plt.xlabel('Status')
+plt.ylabel('Count')
+plt.show()
+
+
+
+
+#put into different years
+rt_copy = rt.copy()
+
+rt_copy["year"] = pd.to_numeric(rt_copy["year"], errors="coerce")
+
+rt_copy["era"] = pd.cut(
+    rt_copy["year"],
+    bins=[0, 2000, 2100],
+    labels=["Pre-2000", "2000+"]
+)
+
+
+
+# sanity check
+print(rt_copy["year"].min(), rt_copy["year"].max())
+print(rt_copy["era"].value_counts())
+
+#min - 1914, max - 2019
+
+rt_exploded["era"] = pd.cut(
+    pd.to_numeric(rt_exploded["year"], errors="coerce"),
+    bins=[0, 2000, 2100],
+    labels=["Pre-2000", "2000+"]
+)
+
+
+#Movie Certificate ranking vs years
+# Pre-2000
+rt_copy[rt_copy["era"] == "Pre-2000"]["tomatometer_status"] \
+    .value_counts() \
+    .plot(kind="bar", color="red")
+
+plt.title("Tomatometer Status (Pre-2000)")
+plt.xlabel("Status")
+plt.ylabel("Count")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+
+# 2000+
+rt_copy[rt_copy["era"] == "2000+"]["tomatometer_status"] \
+    .value_counts() \
+    .plot(kind="bar", color="red")
+
+plt.title("Tomatometer Status (2000+)")
+plt.xlabel("Status")
+plt.ylabel("Count")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+era_counts = rt_copy["era"].value_counts().reindex(["Pre-2000","2000+"])
+
+plt.figure(figsize=(6,4))
+plt.bar(era_counts.index, era_counts.values, color="red")
+plt.xlabel("Era")
+plt.ylabel("Number of Movies")
+plt.title("Number of Movies by Era")
+plt.tight_layout()
+plt.show()
+
+
+#Genre breakdown for each era
+
+genre_counts_pre = (
+    rt_exploded[rt_exploded["era"] == "Pre-2000"]["Genre_list"]
+    .value_counts()
+)
+
+plt.figure(figsize=(10, 6))
+genre_counts_pre.plot(kind="bar", color="red")
+plt.title("Genre Ranking (Pre-2000)")
+plt.xlabel("Genre")
+plt.ylabel("Count")
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
+plt.show()
+
+
+#after 2000
+genre_counts_post = (
+    rt_exploded[rt_exploded["era"] == "2000+"]["Genre_list"]
+    .value_counts()
+)
+
+plt.figure(figsize=(10, 6))
+genre_counts_post.plot(kind="bar", color="red")
+plt.title("Genre Ranking (2000+)")
+plt.xlabel("Genre")
+plt.ylabel("Count")
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
+plt.show()
+
+
+#Number of Movies by Year
+#change year to int and not to display in float
+year_counts = rt["year"].value_counts().sort_index()
+plt.plot(year_counts.index,year_counts.values)
+plt.xlabel("Year")
+plt.ylabel("Number of Movies")
+plt.xticks(year_counts.index,rotation=45) #gets integer
+plt.tight_layout()
+plt.show()
+
+
+
+#Number of Movies by Month
+
+#make sure there are valid months
+valid_months = [
+    "January", "February", "March", "April", "May", "June",
+    "July","August","September","October","November", "December"
+    ]
+
+rt_month = rt[rt["month"].isin(valid_months)].copy()
+rt_month["month"] = pd.Categorical(
+    rt_month["month"],
+    categories = valid_months,
+    ordered = True
+)
+
+rt_month['month'].value_counts().sort_index().plot(kind='bar', color="red")
+plt.title('Number of Movies - Overall')
+plt.xticks(rotation=45)
+plt.xlabel('Month')
+plt.ylabel('Count')
+plt.show()
+
+
+# Pre-2000
+rt_pre = rt_copy[(rt_copy["era"] == "Pre-2000") & (rt_copy["month"].isin(valid_months))].copy()
+rt_pre["month"] = pd.Categorical(rt_pre["month"], categories=valid_months, ordered=True)
+
+rt_pre["month"].value_counts().sort_index().plot(kind="bar", color="red")
+plt.title("Number of Movies by Month (Pre-2000)")
+plt.xlabel("Month")
+plt.ylabel("Count")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+
+# 2000+
+rt_post = rt_copy[(rt_copy["era"] == "2000+") & (rt_copy["month"].isin(valid_months))].copy()
+rt_post["month"] = pd.Categorical(rt_post["month"], categories=valid_months, ordered=True)
+
+rt_post["month"].value_counts().sort_index().plot(kind="bar", color="red")
+plt.title("Number of Movies by Month (2000+)")
+plt.xlabel("Month")
+plt.ylabel("Count")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+#more graphs to add
+
+
+# come back here
+
+#correlation graph starting
+#needs to use tomatometer_status and tomatometer_rating 
+#create new rotten tomato variable so the original one doesn't get messed up
+
+rt_corr = rt.copy()
+
+rt_corr[["tomatometer_status","tomatometer_rating"]]
+
+cert_corr = (
+    rt_corr.groupby("tomatometer_status")["tomatometer_rating"]
+        .mean()
+        .sort_values(ascending=False)
+    )
+
+#now graph this correlation
+data = cert_corr.values
+
+plt.figure(figsize=(4,3))
+plt.imshow(data, cmap="RdYlGn", aspect="auto")
+
+# Axis labels
+plt.yticks(range(len(cert_corr.index)), cert_corr.index)
+plt.xticks([0], ["Avg RT Rating"])
+
+# Annotate values
+for i in range(len(data)):
+    plt.text(0, i, f"{data[i][0]:.1f}", ha="center", va="center", color="black")
+
+plt.colorbar(label="Average RT Rating")
+plt.title("Average Rotten Tomatoes Rating by Status")
+plt.tight_layout()
+plt.show()
+
+
+#Top 10 director
+#for before 2000
+directors_pre = (
+    rt_copy[rt_copy["era"] == "Pre-2000"]["directors"]
+    .value_counts()
+    .head(15)
+)
+
+directors_pre.plot(kind="bar", figsize=(10, 6), color="red")
+plt.title("Top 10 Directors by Number of Movies (Pre-2000)")
+plt.xlabel("Director")
+plt.ylabel("Count")
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
+plt.show()
+
+
+#Top 10 director for 2000+
+directors_post = (
+    rt_copy[rt_copy["era"] == "2000+"]["directors"]
+    .value_counts()
+    .head(15)
+)
+
+directors_post.plot(kind="bar", figsize=(15, 6), color="red")
+plt.title("Top 10 Directors by Number of Movies (2000+)")
+plt.xlabel("Director")
+plt.ylabel("Count")
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
+plt.show()
+
+##### IGNORE THIS CODE
+
+"""
 #drop null values less than 5%
 f = f.dropna()
 
@@ -184,8 +486,8 @@ f['ROI_pct'] = f['ROI'] * 100
 f['title_id'] = f['Title'].astype(str).str.strip().str.lower()
 rt['title_id'] = rt['movie_title'].astype(str).str.strip().str.lower()
 
-rt["year"] = rt["year"].dt.year
-f["year"] = f["year"].astype(int)
+rt["year"] = rt["year"].dtype
+f["year"] = f["Year"].astype(int)
 
 #take away duplicates
 rt_sorted = rt.sort_values('year')
@@ -228,7 +530,7 @@ merged = rt.merge(
     rt_filtered,
     how='left',
     left_on=['movie_title', 'year'],
-    right_on=['Title', 'year'],
+    right_on=['title_id', 'year'],
    
 )
 
@@ -365,7 +667,7 @@ rt = rt.rename(columns={
     })
 
 
-
+"""
 
 
 
