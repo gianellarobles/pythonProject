@@ -173,7 +173,7 @@ rt_copy["era"] = pd.cut(
 
 
 
-# sanity check
+#make sure it is correct
 print(rt_copy["year"].min(), rt_copy["year"].max())
 print(rt_copy["era"].value_counts())
 
