@@ -124,9 +124,6 @@ rt_filtered = rt[
 ]
 
 
-#creating a list within the column 'Genre' in rt
-rt['Genre_list'] = rt['genre'].str.split(',').apply(lambda x: [g.strip() for g in x])
-
 rt_exploded = rt.explode('Genre_list')
 
 
@@ -276,6 +273,41 @@ valid_months = [
     "July","August","September","October","November", "December"
     ]
 
+#check for seasons
+season_map = {
+    "December":"Winter",
+    "January":"Winter",
+    "February":"Winter",
+    "March":"Spring",
+    "April":"Spring",
+    "May":"Spring",
+    "June":"Summer",
+    "July":"Summer",
+    "August":"Summer",
+    "September":"Fall",
+    "October":"Fall",
+    "November":"Fall"}
+
+rt_month["season"]=rt_month["month"].map(season_map)
+
+rt_month["season"].value_counts()
+
+rt_month["season"].value_counts().loc[
+    ["Winter","Spring","Summer","Fall"]
+]
+
+rt_month["season"].value_counts().sum()
+
+season_counts = rt_month["season"].value_counts()
+
+season_percentages = (season_counts / season_counts.sum()) *100
+
+season_percentages_form = season_percentages.round(1).astype(str) +"%"
+
+season_percentages_form.loc[
+    ["Winter","Spring","Summer","Fall"]
+]
+
 rt_month = rt[rt["month"].isin(valid_months)].copy()
 rt_month["month"] = pd.Categorical(
     rt_month["month"],
@@ -336,7 +368,7 @@ cert_corr = (
     )
 
 #now graph this correlation
-data = cert_corr.values
+data = cert_corr.values.reshape(-1,1)
 
 plt.figure(figsize=(4,3))
 plt.imshow(data, cmap="RdYlGn", aspect="auto")
@@ -358,9 +390,11 @@ plt.show()
 #Top 10 director
 #for before 2000
 directors_pre = (
-    rt_copy[rt_copy["era"] == "Pre-2000"]["directors"]
-    .value_counts()
-    .head(15)
+    rt_copy[rt_copy["era"] == "Pre-2000"]
+    .groupby("directors")["tomatometer_rating"]
+    .mean()
+    .sort_values(ascending=False)
+    .head(10)
 )
 
 directors_pre.plot(kind="bar", figsize=(10, 6), color="red")
